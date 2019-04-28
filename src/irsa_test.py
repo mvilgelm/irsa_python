@@ -87,7 +87,7 @@ class IrsaTestFixed(unittest.TestCase):
             plt.plot(load_range, values[m], linestyle="", color=color, markeredgecolor=color,
                      marker=marker, label=r"IRSA, $m=%d$" % m, markerfacecolor="None")
 
-        with open("../tests/varying_frame_size.test", "w") as f:
+        with open("../tests/varying_frame_size.json", "w") as f:
             json.dump(results_to_store, f)
 
         plt.ylabel("Normalized throughput")
@@ -104,7 +104,7 @@ class IrsaTestFixed(unittest.TestCase):
         """
 
         params = {"save_to": "",
-                  "sim_duration": 1000,  # long simulations needed to capture packet loss
+                  "sim_duration": 100000,  # long simulations needed to capture packet loss
                   "num_resources": 200,
                   "traffic_type": "bernoulli",
                   "max_iter": 20}
@@ -148,7 +148,7 @@ class IrsaTestFixed(unittest.TestCase):
             plt.plot(load_range, pktl, "-"+color+marker, markeredgecolor=color,
                      markerfacecolor="None", label=label)
 
-        with open("../tests/pkt_loss.test", "w") as f:
+        with open("../tests/pkt_loss.json", "w") as f:
             json.dump(results_to_store, f)
 
         plt.ylabel("Packet loss")
