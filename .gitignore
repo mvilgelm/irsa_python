@@ -2,3 +2,4 @@ venv/
 .idea/
 **/__pycache__/
 src/grantfreeaccess/bernoulli*
+.DS_Store
