@@ -1,19 +1,31 @@
+"""
+Tests for IRSA implementation. Since it is hard to find a real benchmark, the tests are basically
+just visual inspections, reproducing some plots from the original IRSA article.
+"""
+__author__ = "Mikhail Vilgelm"
+__email__ = "mikhail.vilgelm@tum.de"
+
 import unittest
 import os
 
+import matplotlib
+matplotlib.use("TkAgg")
 import matplotlib.pyplot as plt
-import numpy as np
 
+import numpy as np
 import src.irsa as irsa
 
 
-class IrsaTest(unittest.TestCase):
+class IrsaTestBinomial(unittest.TestCase):
+    """
+    Testing protocols under binomial distribution
+    """
 
     @classmethod
     def setUpClass(cls):
         # directory to store the test plots
         try:
-            os.mkdir("tests")
+            os.mkdir("../tests")
         except FileExistsError:
             # do nothing all good
             pass
@@ -66,7 +78,7 @@ class IrsaTest(unittest.TestCase):
         plt.xlabel("Offered Load")
         plt.legend(loc=0)
         plt.grid(True)
-        plt.savefig("tests/varying_frame_size.pdf")
+        plt.savefig("../tests/varying_frame_size.pdf")
 
     def test_packet_loss(self):
         """
@@ -77,7 +89,7 @@ class IrsaTest(unittest.TestCase):
 
         params = {"save_to": "",
                   "act_prob": 1,
-                  "sim_duration": 100,
+                  "sim_duration": 10000,  # long simulations needed to capture packet loss
                   "traffic_type": "bernoulli",
                   "num_resources": 200,
                   "max_iter": 20,
@@ -122,16 +134,16 @@ class IrsaTest(unittest.TestCase):
         plt.ylim((1e-4, 1e0))
         plt.legend(loc=0)
         plt.grid(True)
-        plt.savefig("tests/packet_loss.pdf")
+        plt.savefig("../tests/packet_loss.pdf")
 
 
-class IrsaTestPoisson(unittest.TestCase):
+class IrsaTestFixed(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
         # directory to store the test plots
         try:
-            os.mkdir("tests")
+            os.mkdir("../tests")
         except FileExistsError:
             # do nothing all good
             pass
@@ -147,6 +159,7 @@ class IrsaTestPoisson(unittest.TestCase):
         params = {"save_to": "",
                   "sim_duration": 100,
                   "max_iter": 20,
+                  "traffic_type": "bernoulli",
                   "degree_distr": [0, 0, 0.5, 0.28, 0, 0, 0, 0, 0.22]}
 
         load_range = [0.1 * x for x in range(1, 11)]
@@ -159,6 +172,7 @@ class IrsaTestPoisson(unittest.TestCase):
                   1000: [0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.79, 0.57, 0.19]}
 
         # determined arbitrary
+        tolerance = 0.01
 
         for m in [50, 200, 1000]:
 
@@ -167,15 +181,16 @@ class IrsaTestPoisson(unittest.TestCase):
             params["num_resources"] = m
 
             for load_idx, load in enumerate(load_range):
-                params["load"] = load
-                res = irsa.irsa_run_poisson(**params)
+                params["num_ues"] = int(m*load)
+                params["act_prob"] = 1
+                res = irsa.irsa_run(**params)
                 t = np.mean(res.throughput_normalized)
                 tc = irsa.mean_confidence_interval(res.throughput_normalized)
                 thr.append(t)
                 thr_c.append(tc)
 
                 # FIXME it will be certainly valuable to check whether confidence interval is not too high
-                self.assertAlmostEqual(values[m][load_idx], t, delta=tc)
+                self.assertAlmostEqual(values[m][load_idx], t, delta=tc+tolerance)
 
             plt.errorbar(load_range, thr, linestyle="--", yerr=thr_c, label=r"$m=%d$" % m)
             plt.plot(load_range, values[m], linestyle="", marker="s", label=r"IRSA, $m=%d$" % m)
@@ -184,7 +199,7 @@ class IrsaTestPoisson(unittest.TestCase):
         plt.xlabel("Offered Load")
         plt.legend(loc=0)
         plt.grid(True)
-        plt.savefig("tests/varying_frame_size_poisson.pdf")
+        plt.savefig("../tests/varying_frame_size_poisson.pdf")
 
     def test_packet_loss_poisson(self):
         """
@@ -194,8 +209,9 @@ class IrsaTestPoisson(unittest.TestCase):
         """
 
         params = {"save_to": "",
-                  "sim_duration": 100,
+                  "sim_duration": 10000,  # long simulations needed to capture packet loss
                   "num_resources": 200,
+                  "traffic_type": "bernoulli",
                   "max_iter": 20}
 
         load_range = [0.1 * x for x in range(1, 11)]
@@ -221,8 +237,9 @@ class IrsaTestPoisson(unittest.TestCase):
             pktl_c = []
 
             for load_idx, load in enumerate(load_range):
-                params["load"] = load
-                res = irsa.irsa_run_poisson(**params)
+                params["num_ues"] = int(params["num_resources"]*load)
+                params["act_prob"] = 1
+                res = irsa.irsa_run(**params)
                 pktl.append(np.mean(res.packet_loss))
                 pktl_c.append(irsa.mean_confidence_interval(res.packet_loss))
 
@@ -237,14 +254,14 @@ class IrsaTestPoisson(unittest.TestCase):
         plt.ylim((1e-4, 1e0))
         plt.legend(loc=0)
         plt.grid(True)
-        plt.savefig("tests/packet_loss_poisson.pdf")
+        plt.savefig("../tests/packet_loss_poisson.pdf")
 
 
 if __name__ == "__main__":
     suite = unittest.TestSuite()
 
-    suite.addTest(unittest.makeSuite(IrsaTestPoisson))
-    suite.addTest(unittest.makeSuite(IrsaTest))
+    suite.addTest(unittest.makeSuite(IrsaTestFixed))
+    suite.addTest(unittest.makeSuite(IrsaTestBinomial))
 
     runner = unittest.TextTestRunner()
     runner.run(suite)

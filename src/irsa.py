@@ -1,5 +1,14 @@
+"""
+IRSA implementation.
+"""
+__author__ = "Mikhail Vilgelm"
+__email__ = "mikhail.vilgelm@tum.de"
+
 import json
 import time
+
+import matplotlib
+matplotlib.use("TkAgg")
 
 import numpy as np
 import matplotlib.pyplot as plt
@@ -8,15 +17,22 @@ import weakref
 
 from tqdm import trange
 
-plt.style.use('ggplot')
-
+plt.style.use('classic')
 
 def mean_confidence_interval(data, confidence=0.95):
+    """
+    Compute confidence interval on data
+    :param data:
+    :param confidence:
+    :return:
+    """
+
     a = 1.0*np.array(data)
     n = len(a)
     m, se = np.mean(a), st.sem(a)
     h = se * st.t._ppf((1+confidence)/2., n-1)
     return h
+
 
 class IrsaResults:
     """
@@ -30,31 +46,37 @@ class IrsaResults:
 
 
 class BaseStation:
+    """
+    Base station, implementing virtual assignment of resources (random selection),
+    and decoding (so far ideal decoding only implemented)
+    """
 
     def __init__(self, degree_distr, num_resources):
         self.degree_distr = degree_distr
         self.num_resources = num_resources
 
-    def get_degree_distr(self):
-        return self.degree_distr
-
-    def get_num_resources(self):
-        return self.num_resources
+        # TODO make a parameter
+        self.enable_ideal_decoding = True
 
     def assign_ues_to_resources(self, ues):
+        """
+        (Virtual) allocation of resources to UEs.
+        :param ues: pool of active UEs
+        :return: resources with ues allocated to them
+        """
 
-        num_resources = self.num_resources
-
-        resources = [IrsaResource(idx) for idx in range(num_resources)]
-
-        degree_distr = self.degree_distr
+        # create resources
+        resources = [IrsaResource(idx) for idx in range(self.num_resources)]
 
         for ue in ues:
 
-            num_replicas = np.random.choice(range(len(degree_distr)), p=degree_distr)
+            # random choice of the number of replicas
+            num_replicas = np.random.choice(range(len(self.degree_distr)), p=self.degree_distr)
 
-            # choose resources
+            # random resource choice
             resources_ue = np.random.choice(resources, num_replicas, replace=False)
+
+            # avoiding cycling references, otherwise seems to memory leak
             ue.pointers = [weakref.ref(r) for r in resources_ue]
             for r in resources_ue:
                 r.ues.add(ue)
@@ -62,6 +84,25 @@ class BaseStation:
         return resources
 
     def decode(self, resources, max_iter):
+        """
+        Takes frame slots (resources), and decodes the successful UEs
+        :param resources: resources with UEs in them
+        :param max_iter: maximum number of iteration for decoding
+        :return: set of decoded UEs, execution time
+        """
+
+        if self.enable_ideal_decoding:
+            return self.decoding_ideal(resources, max_iter)
+        else:
+            return self.decoding_realistic(resources, max_iter)
+
+    def decoding_ideal(self, resources, max_iter):
+        """
+        Ideal decoding, assuming perfect interference cancellation
+        :param resources:
+        :param max_iter:
+        :return:
+        """
         start = time.time()
 
         # get clean slots to start with
@@ -104,13 +145,24 @@ class BaseStation:
 
             iter_count += 1
 
-
         end = time.time()
 
-        return decoded_ues, end-start
+        return decoded_ues, end - start
+
+    def decoding_realistic(self, resources, max_iter):
+        """
+        TODO implement
+        :param resources:
+        :param max_iter:
+        :return:
+        """
+        raise NotImplementedError
 
 
 class IrsaResource:
+    """
+    Represents a resource
+    """
 
     def __init__(self, idx):
         self.idx = idx
@@ -118,7 +170,7 @@ class IrsaResource:
 
     def process(self, mpr):
         """
-        FIXME
+        FIXME legacy, for extention to MPR
         :param mpr:
         :return:
         """
@@ -136,6 +188,12 @@ class IrsaResource:
             return False
 
     def cancel_ue(self, ue):
+        """
+        Cancel interference from a given UE
+        :param ue: intf to cancel
+        :return: amount of remaining UEs
+        """
+
         try:
             self.ues.remove(ue)
         except:
@@ -145,12 +203,15 @@ class IrsaResource:
 
 
 class IrsaUE:
+    """
+    Represents a User Equipment
+    """
 
     def __init__(self, **kwargs):
         # stores pointers to replicas
         self.pointers = []
 
-        # legacy -- for extension
+        # FIXME legacy code -- for extension
         self.tx_attempts = 0
         self.active = False
 
@@ -163,10 +224,12 @@ class IrsaUE:
             if key == "tx_limit":
                 self.tx_limit = val
 
-    def activate(self):
-        self.active = True
-
     def deactivate(self, success):
+        """
+        Legacy function, for extensions
+        :param success:
+        :return:
+        """
         self.active = False
         self.tx_attempts = 0
         if success:
@@ -185,6 +248,11 @@ class Params:
 
 
 def irsa_run(**kwargs):
+    """
+    Single simulation run
+    :param kwargs: simulation parameters
+    :return:
+    """
 
     # **** Load variables ****
     pars = Params(**kwargs)
@@ -215,68 +283,6 @@ def irsa_run(**kwargs):
         if len(active_ues) > 0:
 
             success_count = 0
-            collision_count = 0
-
-            resources = bs.assign_ues_to_resources(active_ues)
-
-            # processing the resources
-            decoded_ues, duration = bs.decode(resources, pars.max_iter)
-
-            success_count += len(decoded_ues)
-
-            packet_loss = (len(active_ues) - success_count) / len(active_ues)
-
-            # Update learning alg
-            throughput_normalized = success_count / len(resources)
-
-            # Store the results
-            results.throughput_normalized.append(throughput_normalized)
-            results.packet_loss.append(packet_loss)
-            results.avg_decoding_time = results.avg_decoding_time + (duration-results.avg_decoding_time) / (t+1)
-
-        else:
-
-            results.throughput_normalized.append(0)
-            results.packet_loss.append(0)
-
-        if t % int(pars.sim_duration/10) == 0:
-            sim_range.set_description(f"Thr: {np.mean(results.throughput_normalized)}")
-
-    if not (pars.save_to is None or pars.save_to == ""):
-        with open(pars.save_to, "w") as f:
-            json.dump(results.__dict__, f)
-
-    return results
-
-
-def irsa_run_poisson(**kwargs):
-
-    # **** Load variables ****
-    pars = Params(**kwargs)
-
-    # **** Create the instances ****
-
-    results = IrsaResults()
-
-    bs = BaseStation(pars.degree_distr, pars.num_resources)
-
-    # *** initialize *****
-
-    # *** Start the simulation ***
-    sim_range = trange(pars.sim_duration, desc="Thr", mininterval=1)
-    for t in sim_range:
-
-        # create active ues
-        num_ues = np.random.poisson(pars.load * bs.num_resources)
-
-        active_ues = []
-        for idx in range(num_ues):
-            active_ues.append(IrsaUE(idx=idx, **kwargs))
-
-        if len(active_ues) > 0:
-
-            success_count = 0
-            collision_count = 0
 
             resources = bs.assign_ues_to_resources(active_ues)
 
