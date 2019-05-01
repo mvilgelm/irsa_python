@@ -7,17 +7,12 @@ __email__ = "mikhail.vilgelm@tum.de"
 import json
 import time
 
-import matplotlib
-matplotlib.use("TkAgg")
-
 import numpy as np
-import matplotlib.pyplot as plt
 import scipy.stats as st
 import weakref
 
 from tqdm import trange
 
-plt.style.use('classic')
 
 def mean_confidence_interval(data, confidence=0.95):
     """
