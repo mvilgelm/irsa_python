@@ -46,14 +46,22 @@ class BaseStation:
     and decoding (so far ideal decoding only implemented)
     """
 
-    def __init__(self, degree_distr, num_resources):
+    def __init__(self, degree_distr, num_resources, max_iter, enable_ideal_decoding=True):
+        """
+
+        :param degree_distr: degree distrbution to use for ues
+        :param num_resources: number of resources (slots per frame)
+        :param max_iter: maximum number of decoding iterations
+        :param enable_ideal_decoding: if False, decoding is done in a realistic way
+        """
         self.degree_distr = degree_distr
         self.num_resources = num_resources
 
         # TODO make a parameter
-        self.enable_ideal_decoding = True
+        self.enable_ideal_decoding = enable_ideal_decoding
+        self.max_iter = max_iter
 
-    def assign_ues_to_resources(self, ues):
+    def assign_resources(self, ues):
         """
         (Virtual) allocation of resources to UEs.
         :param ues: pool of active UEs
@@ -78,7 +86,7 @@ class BaseStation:
 
         return resources
 
-    def decode(self, resources, max_iter):
+    def process_resources(self, resources, max_iter):
         """
         Takes frame slots (resources), and decodes the successful UEs
         :param resources: resources with UEs in them
@@ -260,7 +268,7 @@ def irsa_run(**kwargs):
     for idx in range(pars.num_ues):
         ues.append(IrsaUE(idx=idx, **kwargs))
 
-    bs = BaseStation(pars.degree_distr, pars.num_resources)
+    bs = BaseStation(pars.degree_distr, pars.num_resources, max_iter=pars.max_iter)
 
     # *** initialize *****
 
@@ -279,10 +287,10 @@ def irsa_run(**kwargs):
 
             success_count = 0
 
-            resources = bs.assign_ues_to_resources(active_ues)
+            resources = bs.assign_resources(active_ues)
 
             # processing the resources
-            decoded_ues, duration = bs.decode(resources, pars.max_iter)
+            decoded_ues, duration = bs.process_resources(resources)
 
             success_count += len(decoded_ues)
 
